@@ -1,9 +1,10 @@
 // app.js — Multi-Timeframe SMC Dashboard + Simulated Trade Journal
 
-const BINANCE_API   = 'https://api.binance.com/api/v3/klines';
-const TICKER_API    = 'https://api.binance.com/api/v3/ticker/price';
-const TRADES_KEY    = 'smc_sim_trades';
-const POLL_INTERVAL = 60_000; // ms
+const BINANCE_API    = 'https://api.binance.com/api/v3/klines';
+const TICKER_API     = 'https://api.binance.com/api/v3/ticker/price';
+const TRADES_KEY     = 'smc_sim_trades';
+const SHEETS_URL_KEY = 'smc_sheets_url';
+const POLL_INTERVAL  = 60_000; // ms
 
 let chart        = null;
 let candleSeries = null;
@@ -12,18 +13,88 @@ let activePriceLines = [];
 
 let currentSymbol   = 'BTCUSDT';
 let currentInterval = '4h';
-let latestReport    = null;   // last MTF report (for record button)
-let pollingTimer    = null;   // setInterval handle
+let latestReport    = null;
+let pollingTimer    = null;
 
 // ══════════════════════════════════════════════════════════════════
-//  TRADE JOURNAL — localStorage helpers
+//  GOOGLE SHEETS 整合
+//  - 使用記憶體快取（_tradesCache）讓所有函數保持同步
+//  - 讀取：App 啟動時從 Sheets 初始化快取
+//  - 寫入：同步到 localStorage，背景同步到 Sheets
 // ══════════════════════════════════════════════════════════════════
-function loadTrades() {
-  try { return JSON.parse(localStorage.getItem(TRADES_KEY) || '[]'); }
-  catch { return []; }
+let _tradesCache = null;
+
+function getSheetsUrl() { return (localStorage.getItem(SHEETS_URL_KEY) || '').trim(); }
+function setSheetsUrl(url) {
+  localStorage.setItem(SHEETS_URL_KEY, url.trim());
+  updateSheetsStatus('connecting');
+  initTradesCache().then(() => {
+    renderTradeLog();
+    updateSheetsStatus(url.trim() ? 'ok' : 'none');
+  });
 }
+
+// 從 Sheets（或 localStorage 備援）初始化快取
+async function initTradesCache() {
+  const url = getSheetsUrl();
+  if (url) {
+    try {
+      const res  = await fetch(`${url}?t=${Date.now()}`);
+      const data = await res.json();
+      if (Array.isArray(data.trades)) {
+        _tradesCache = data.trades;
+        localStorage.setItem(TRADES_KEY, JSON.stringify(data.trades)); // 本地備份
+        updateSheetsStatus('ok');
+        return;
+      }
+    } catch (e) {
+      console.warn('Sheets 讀取失敗，使用本地快取：', e);
+      updateSheetsStatus('error');
+    }
+  }
+  try { _tradesCache = JSON.parse(localStorage.getItem(TRADES_KEY) || '[]'); }
+  catch { _tradesCache = []; }
+}
+
+// 讀（同步，從快取）
+function loadTrades() {
+  if (_tradesCache === null) {
+    try { _tradesCache = JSON.parse(localStorage.getItem(TRADES_KEY) || '[]'); }
+    catch { _tradesCache = []; }
+  }
+  return _tradesCache;
+}
+
+// 寫（同步到 localStorage + 背景推送 Sheets）
 function saveTrades(trades) {
+  _tradesCache = trades;
   localStorage.setItem(TRADES_KEY, JSON.stringify(trades));
+
+  const url = getSheetsUrl();
+  if (!url) return;
+
+  // 背景同步，不阻塞 UI
+  fetch(url, {
+    method:  'POST',
+    mode:    'no-cors',              // 避免 CORS preflight
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+    body:    JSON.stringify({ trades }),
+  }).catch(e => console.warn('Sheets 寫入失敗：', e));
+}
+
+// 狀態指示器
+function updateSheetsStatus(state) {
+  const el = document.getElementById('sheets-status');
+  if (!el) return;
+  const map = {
+    none:       ['—',       '#555'],
+    connecting: ['連接中…', '#f39c12'],
+    ok:         ['✓ 已連接', '#26a69a'],
+    error:      ['✗ 連接失敗', '#ef5350'],
+  };
+  const [text, color] = map[state] || map.none;
+  el.textContent  = text;
+  el.style.color  = color;
 }
 
 function recordTrade() {
@@ -649,9 +720,31 @@ function expandSec(id) {
 // ══════════════════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════════════════
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   initChart();
-  renderTradeLog(); // load from storage
+
+  // ── Sheets URL 輸入框 ──
+  const sheetsInput = document.getElementById('sheets-url-input');
+  if (sheetsInput) {
+    sheetsInput.value = getSheetsUrl();
+    sheetsInput.addEventListener('keypress', e => {
+      if (e.key === 'Enter') setSheetsUrl(e.target.value);
+    });
+  }
+  document.getElementById('sheets-connect-btn')?.addEventListener('click', () => {
+    setSheetsUrl(sheetsInput?.value || '');
+  });
+  document.getElementById('sheets-clear-btn')?.addEventListener('click', () => {
+    if (sheetsInput) sheetsInput.value = '';
+    setSheetsUrl('');
+    updateSheetsStatus('none');
+  });
+
+  // ── 初始化快取（從 Sheets 或 localStorage）──
+  updateSheetsStatus(getSheetsUrl() ? 'connecting' : 'none');
+  await initTradesCache();
+  updateSheetsStatus(getSheetsUrl() ? 'ok' : 'none');
+  renderTradeLog();
 
   const symbolInput = document.getElementById('symbol-input');
   symbolInput.value = currentSymbol;
@@ -687,7 +780,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   document.getElementById('refresh-btn').addEventListener('click', loadAndAnalyze);
 
-  // Auto-start polling if there are open trades
   if (loadTrades().some(t => t.status === 'open')) startPolling();
 
   loadAndAnalyze();

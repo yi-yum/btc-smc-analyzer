@@ -139,6 +139,37 @@
     }
     #record-btn:hover { background: #2962ff; color: #fff; }
 
+    /* ── Google Sheets 設定區塊 ──────────────────────── */
+    .sheets-box {
+      background: #131722; border: 1px solid #2a2e39; border-radius: 5px;
+      padding: 8px 9px; margin-bottom: 8px;
+    }
+    .sheets-box-title {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; font-weight: 600; color: #9b9ea8; margin-bottom: 6px;
+    }
+    .sheets-input-row { margin-bottom: 5px; }
+    .sheets-input-row input {
+      width: 100%; background: #1a1d28; border: 1px solid #2a2e39;
+      color: #d1d4dc; padding: 5px 8px; border-radius: 4px;
+      font-size: 11px; outline: none;
+    }
+    .sheets-input-row input:focus { border-color: #3498db; }
+    .sheets-input-row input::placeholder { color: #555; }
+    .sheets-btn-row { display: flex; gap: 5px; align-items: center; }
+    .sheets-btn-row button {
+      background: #2a2e39; border: 1px solid #363c4e; color: #9b9ea8;
+      padding: 3px 10px; border-radius: 4px; cursor: pointer;
+      font-size: 11px; font-weight: 600; transition: all .15s;
+    }
+    #sheets-connect-btn:hover { background:#26a69a; border-color:#26a69a; color:#fff; }
+    #sheets-clear-btn:hover   { background:#ef5350; border-color:#ef5350; color:#fff; }
+    .sheets-help-link {
+      margin-left: auto; font-size: 10px; color: #555;
+      text-decoration: none; white-space: nowrap;
+    }
+    .sheets-help-link:hover { color: #3498db; }
+
     /* ── Trade Journal ───────────────────────────────── */
     .trade-toolbar {
       display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;
@@ -317,11 +348,35 @@
           <span class="sec-toggle" id="toggle-trade-body">▲</span>
         </div>
         <div id="trade-body" class="sec-body">
+
+          <!-- Google Sheets 設定 -->
+          <div class="sheets-box">
+            <div class="sheets-box-title">
+              <span>☁️ Google Sheets 同步</span>
+              <span id="sheets-status" style="font-size:10px;color:#555">—</span>
+            </div>
+            <div class="sheets-input-row">
+              <input
+                type="text"
+                id="sheets-url-input"
+                placeholder="貼上 Apps Script 網頁應用程式網址…"
+              />
+            </div>
+            <div class="sheets-btn-row">
+              <button id="sheets-connect-btn">連接</button>
+              <button id="sheets-clear-btn">清除</button>
+              <a href="https://github.com/你的帳號/smc-dashboard/blob/master/google-apps-script/Code.gs"
+                 target="_blank" class="sheets-help-link">📄 查看設定步驟</a>
+            </div>
+          </div>
+
+          <!-- 巡價工具列 -->
           <div class="trade-toolbar">
             <button id="polling-btn" onclick="togglePolling()">▶ 開始巡價</button>
             <span id="last-check"></span>
             <button class="clear-all-btn" onclick="clearAllTrades()">清空記錄</button>
           </div>
+
           <div id="trade-stats"></div>
           <div id="trade-list"></div>
         </div>
