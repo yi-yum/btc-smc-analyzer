@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMC 分析儀表板</title>
+  <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #131722;
+      color: #d1d4dc;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 13px;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    /* ── Layout ─────────────────────────────────────── */
+    .app { display: flex; flex-direction: column; height: 100dvh; }
+
+    /* ── Header ─────────────────────────────────────── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px;
+      background: #1a1d28;
+      border-bottom: 1px solid #2a2e39;
+      gap: 12px;
+      flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+
+    .header-left, .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .logo {
+      font-size: 15px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+    }
+
+    /* Symbol input */
+    #symbol-input {
+      background: #131722;
+      border: 1px solid #2a2e39;
+      color: #d1d4dc;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 13px;
+      width: 160px;
+      outline: none;
+      text-transform: uppercase;
+    }
+    #symbol-input:focus { border-color: #3498db; }
+    #symbol-input::placeholder { text-transform: none; }
+
+    /* Quick symbol buttons */
+    .sym-group { display: flex; gap: 4px; }
+    .sym-btn {
+      background: #2a2e39;
+      border: 1px solid #363c4e;
+      color: #9b9ea8;
+      padding: 4px 9px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all .15s;
+    }
+    .sym-btn:hover, .sym-btn.active {
+      background: #3498db;
+      border-color: #3498db;
+      color: #fff;
+    }
+
+    /* Timeframe buttons */
+    .tf-group { display: flex; gap: 4px; }
+    .tf-btn {
+      background: #2a2e39;
+      border: 1px solid #363c4e;
+      color: #9b9ea8;
+      padding: 4px 11px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all .15s;
+    }
+    .tf-btn:hover, .tf-btn.active {
+      background: #2962ff;
+      border-color: #2962ff;
+      color: #fff;
+    }
+
+    /* Refresh button */
+    #refresh-btn {
+      background: #2962ff;
+      border: none;
+      color: #fff;
+      padding: 5px 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+      transition: background .15s;
+    }
+    #refresh-btn:hover    { background: #1a4fd8; }
+    #refresh-btn:disabled { background: #2a2e39; color: #555; cursor: default; }
+
+    #status {
+      font-size: 11px;
+      color: #9b9ea8;
+      white-space: nowrap;
+    }
+
+    /* ── Main ───────────────────────────────────────── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+
+    .chart-wrap { flex: 1; overflow: hidden; }
+    #chart { width: 100%; height: 100%; }
+
+    /* ── Side Panel ─────────────────────────────────── */
+    .panel {
+      width: 290px;
+      flex-shrink: 0;
+      background: #1a1d28;
+      border-left: 1px solid #2a2e39;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .panel::-webkit-scrollbar { width: 4px; }
+    .panel::-webkit-scrollbar-thumb { background: #2a2e39; border-radius: 2px; }
+
+    .sec {
+      padding: 10px 12px;
+      border-bottom: 1px solid #2a2e39;
+    }
+
+    .sec-title {
+      font-size: 10px;
+      font-weight: 700;
+      color: #9b9ea8;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* Trend badge */
+    #trend-badge {
+      padding: 2px 9px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* Current price */
+    .price-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-top: 2px;
+    }
+    .price-label { color: #9b9ea8; font-size: 11px; }
+    #current-price { font-size: 20px; font-weight: 700; color: #fff; }
+
+    /* Row items (events, levels) */
+    .row-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 6px;
+      background: #131722;
+      border-radius: 4px;
+      margin-bottom: 3px;
+      font-size: 11px;
+    }
+    .row-item .dim { color: #555; font-size: 10px; }
+    .empty { color: #555; font-size: 11px; text-align: center; padding: 8px 0; }
+
+    /* Trade setup */
+    .setup-dir {
+      text-align: center;
+      padding: 7px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 14px;
+      margin-bottom: 6px;
+    }
+    .setup-note {
+      font-size: 11px;
+      color: #9b9ea8;
+      text-align: center;
+      margin-bottom: 8px;
+    }
+    .setup-rows { display: flex; flex-direction: column; gap: 3px; }
+    .setup-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 4px 6px;
+      background: #131722;
+      border-radius: 4px;
+      font-size: 11px;
+    }
+    .setup-row span:first-child { color: #9b9ea8; }
+    .setup-row span:last-child  { font-weight: 600; }
+    .setup-row small { font-weight: 400; opacity: .65; }
+
+    /* Legend */
+    .legend-list { display: flex; flex-direction: column; gap: 4px; }
+    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9b9ea8; }
+    .legend-dot {
+      width: 10px; height: 10px;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    /* Footer */
+    .footer {
+      flex-shrink: 0;
+      padding: 5px 12px;
+      font-size: 10px;
+      color: #555;
+      border-top: 1px solid #2a2e39;
+      background: #1a1d28;
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ───────────────────────────────────── -->
+  <header class="header">
+    <div class="header-left">
+      <div class="logo">📊 SMC 分析儀表板</div>
+
+      <input type="text" id="symbol-input" placeholder="輸入幣種（Enter 確認）" />
+
+      <div class="sym-group">
+        <button class="sym-btn active" data-symbol="BTCUSDT">BTC</button>
+        <button class="sym-btn"        data-symbol="ETHUSDT">ETH</button>
+        <button class="sym-btn"        data-symbol="SOLUSDT">SOL</button>
+        <button class="sym-btn"        data-symbol="BNBUSDT">BNB</button>
+        <button class="sym-btn"        data-symbol="XRPUSDT">XRP</button>
+        <button class="sym-btn"        data-symbol="DOGEUSDT">DOGE</button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="tf-group">
+        <button class="tf-btn"        data-interval="15m">15m</button>
+        <button class="tf-btn"        data-interval="1h">1H</button>
+        <button class="tf-btn active" data-interval="4h">4H</button>
+        <button class="tf-btn"        data-interval="1d">1D</button>
+      </div>
+      <button id="refresh-btn">🔄 刷新</button>
+      <span id="status"></span>
+    </div>
+  </header>
+
+  <!-- ── Main ─────────────────────────────────────── -->
+  <div class="main">
+
+    <!-- Chart -->
+    <div class="chart-wrap">
+      <div id="chart"></div>
+    </div>
+
+    <!-- Side Panel -->
+    <aside class="panel">
+
+      <!-- Market Structure -->
+      <div class="sec">
+        <div class="sec-title">
+          <span>市場結構</span>
+          <span id="trend-badge">—</span>
+        </div>
+        <div class="price-row">
+          <span class="price-label">現價</span>
+          <span id="current-price">—</span>
+        </div>
+      </div>
+
+      <!-- BOS / CHoCH Events -->
+      <div class="sec">
+        <div class="sec-title">結構事件（BOS / CHoCH）</div>
+        <div id="recent-events"></div>
+      </div>
+
+      <!-- Key Levels -->
+      <div class="sec">
+        <div class="sec-title">關鍵區域（OB / EQH / EQL / FVG）</div>
+        <div id="key-levels"></div>
+      </div>
+
+      <!-- Trade Setup -->
+      <div class="sec">
+        <div class="sec-title">操作建議</div>
+        <div id="trade-setup"></div>
+      </div>
+
+      <!-- Legend -->
+      <div class="sec">
+        <div class="sec-title">圖例說明</div>
+        <div class="legend-list">
+          <div class="legend-item"><span class="legend-dot" style="background:#26a69a"></span>Bull OB / BOS ↑</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#ef5350"></span>Bear OB / BOS ↓</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#f39c12"></span>CHoCH（結構翻轉）</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#f1c40f"></span>EQH / EQL（等高低點）</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#1abc9c"></span>FVG 多頭缺口</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#e74c3c"></span>FVG 空頭缺口</div>
+          <div class="legend-item"><span class="legend-dot" style="background:#3498db"></span>進場 / 止損 / 止盈</div>
+        </div>
+      </div>
+
+    </aside>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    資料來源：Binance 公開 API &nbsp;|&nbsp; 僅供技術分析參考，非投資建議
+  </div>
+
+</div>
+
+<script src="smc.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
