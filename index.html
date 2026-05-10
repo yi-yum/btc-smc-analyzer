@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SMC 分析儀表板</title>
+  <title>SMC 多框架分析儀表板</title>
   <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -17,240 +17,172 @@
       overflow: hidden;
     }
 
-    /* ── Layout ─────────────────────────────────────── */
     .app { display: flex; flex-direction: column; height: 100dvh; }
 
-    /* ── Header ─────────────────────────────────────── */
+    /* ── Header ───────────────────────────────── */
     .header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 8px 14px;
+      padding: 7px 14px;
       background: #1a1d28;
       border-bottom: 1px solid #2a2e39;
-      gap: 12px;
+      gap: 10px;
       flex-shrink: 0;
       flex-wrap: wrap;
     }
-
     .header-left, .header-right {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
     }
+    .logo { font-size: 14px; font-weight: 700; color: #fff; white-space: nowrap; }
 
-    .logo {
-      font-size: 15px;
-      font-weight: 700;
-      color: #fff;
-      white-space: nowrap;
-    }
-
-    /* Symbol input */
     #symbol-input {
-      background: #131722;
-      border: 1px solid #2a2e39;
-      color: #d1d4dc;
-      padding: 5px 10px;
-      border-radius: 4px;
-      font-size: 13px;
-      width: 160px;
-      outline: none;
-      text-transform: uppercase;
+      background: #131722; border: 1px solid #2a2e39; color: #d1d4dc;
+      padding: 5px 10px; border-radius: 4px; font-size: 13px; width: 155px;
+      outline: none; text-transform: uppercase;
     }
     #symbol-input:focus { border-color: #3498db; }
     #symbol-input::placeholder { text-transform: none; }
 
-    /* Quick symbol buttons */
-    .sym-group { display: flex; gap: 4px; }
-    .sym-btn {
-      background: #2a2e39;
-      border: 1px solid #363c4e;
-      color: #9b9ea8;
-      padding: 4px 9px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      transition: all .15s;
-    }
-    .sym-btn:hover, .sym-btn.active {
-      background: #3498db;
-      border-color: #3498db;
-      color: #fff;
-    }
+    .sym-group, .tf-group { display: flex; gap: 3px; }
 
-    /* Timeframe buttons */
-    .tf-group { display: flex; gap: 4px; }
-    .tf-btn {
-      background: #2a2e39;
-      border: 1px solid #363c4e;
-      color: #9b9ea8;
-      padding: 4px 11px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 12px;
-      font-weight: 600;
-      transition: all .15s;
+    .sym-btn, .tf-btn {
+      background: #2a2e39; border: 1px solid #363c4e; color: #9b9ea8;
+      padding: 4px 9px; border-radius: 4px; cursor: pointer;
+      font-size: 11px; font-weight: 600; transition: all .15s;
     }
-    .tf-btn:hover, .tf-btn.active {
-      background: #2962ff;
-      border-color: #2962ff;
-      color: #fff;
-    }
+    .sym-btn:hover, .sym-btn.active { background:#3498db; border-color:#3498db; color:#fff; }
+    .tf-btn:hover,  .tf-btn.active  { background:#2962ff; border-color:#2962ff; color:#fff; }
 
-    /* Refresh button */
     #refresh-btn {
-      background: #2962ff;
-      border: none;
-      color: #fff;
-      padding: 5px 14px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      transition: background .15s;
+      background: #2962ff; border: none; color: #fff;
+      padding: 5px 13px; border-radius: 4px; cursor: pointer;
+      font-size: 12px; font-weight: 600; transition: background .15s;
     }
     #refresh-btn:hover    { background: #1a4fd8; }
     #refresh-btn:disabled { background: #2a2e39; color: #555; cursor: default; }
 
-    #status {
-      font-size: 11px;
-      color: #9b9ea8;
-      white-space: nowrap;
-    }
+    #status { font-size: 11px; color: #9b9ea8; white-space: nowrap; }
 
-    /* ── Main ───────────────────────────────────────── */
-    .main { display: flex; flex: 1; overflow: hidden; }
-
-    .chart-wrap { flex: 1; overflow: hidden; }
-    #chart { width: 100%; height: 100%; }
-
-    /* ── Side Panel ─────────────────────────────────── */
-    .panel {
-      width: 290px;
+    /* ── Chart TF label ───────────────────────── */
+    .chart-tf-label {
+      font-size: 10px; color: #555; padding: 3px 8px;
+      background: #1a1d28; border-bottom: 1px solid #2a2e39;
       flex-shrink: 0;
-      background: #1a1d28;
-      border-left: 1px solid #2a2e39;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
     }
+    .chart-tf-label strong { color: #9b9ea8; }
 
+    /* ── Main ─────────────────────────────────── */
+    .main { display: flex; flex: 1; overflow: hidden; }
+    .chart-wrap { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+    #chart { flex: 1; }
+
+    /* ── Panel ────────────────────────────────── */
+    .panel {
+      width: 300px; flex-shrink: 0;
+      background: #1a1d28; border-left: 1px solid #2a2e39;
+      overflow-y: auto; display: flex; flex-direction: column;
+    }
     .panel::-webkit-scrollbar { width: 4px; }
     .panel::-webkit-scrollbar-thumb { background: #2a2e39; border-radius: 2px; }
 
-    .sec {
-      padding: 10px 12px;
+    /* Price header */
+    .price-header {
+      padding: 10px 12px 8px;
       border-bottom: 1px solid #2a2e39;
+      display: flex; justify-content: space-between; align-items: center;
     }
-
-    .sec-title {
-      font-size: 10px;
-      font-weight: 700;
-      color: #9b9ea8;
-      text-transform: uppercase;
-      letter-spacing: .6px;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-
-    /* Trend badge */
-    #trend-badge {
-      padding: 2px 9px;
-      border-radius: 10px;
-      font-size: 11px;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    /* Current price */
-    .price-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      margin-top: 2px;
-    }
-    .price-label { color: #9b9ea8; font-size: 11px; }
+    .price-symbol { font-size: 11px; color: #9b9ea8; font-weight: 600; }
     #current-price { font-size: 20px; font-weight: 700; color: #fff; }
 
-    /* Row items (events, levels) */
-    .row-item {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 6px;
-      background: #131722;
-      border-radius: 4px;
-      margin-bottom: 3px;
-      font-size: 11px;
+    /* Section */
+    .sec { border-bottom: 1px solid #2a2e39; }
+    .sec-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 7px 12px 5px;
+      cursor: pointer; user-select: none;
     }
-    .row-item .dim { color: #555; font-size: 10px; }
-    .empty { color: #555; font-size: 11px; text-align: center; padding: 8px 0; }
+    .sec-header:hover { background: #1e2030; }
+    .sec-title {
+      font-size: 10px; font-weight: 700; color: #9b9ea8;
+      text-transform: uppercase; letter-spacing: .5px;
+    }
+    .sec-badge { display: flex; align-items: center; gap: 6px; }
+    .sec-toggle { color: #555; font-size: 10px; }
+    .sec-body { padding: 0 12px 8px; }
+    .sec-body.collapsed { display: none; }
 
-    /* Trade setup */
-    .setup-dir {
-      text-align: center;
-      padding: 7px;
-      border-radius: 4px;
-      font-weight: 700;
-      font-size: 14px;
-      margin-bottom: 6px;
+    /* Mini trend badge */
+    .mini-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      font-size: 10px; font-weight: 700; color: #fff;
     }
-    .setup-note {
-      font-size: 11px;
-      color: #9b9ea8;
-      text-align: center;
-      margin-bottom: 8px;
+
+    /* MTF trend row */
+    .mtf-trends {
+      display: flex; gap: 6px; padding: 6px 12px 8px;
     }
-    .setup-rows { display: flex; flex-direction: column; gap: 3px; }
+    .mtf-tf {
+      flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px;
+      background: #131722; border-radius: 4px; padding: 5px 4px;
+    }
+    .mtf-tf-label { font-size: 10px; color: #555; font-weight: 700; }
+
+    /* Row items */
+    .row-item {
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 6px; padding: 3px 5px; background: #131722;
+      border-radius: 4px; margin-bottom: 2px; font-size: 11px;
+    }
+    .dim { color: #555; font-size: 10px; flex-shrink: 0; }
+    .empty { color: #555; font-size: 11px; text-align: center; padding: 6px 0; }
+
+    /* Recommendation */
+    .rec-dir {
+      text-align: center; padding: 8px; border-radius: 5px;
+      font-weight: 700; font-size: 15px; margin-bottom: 7px;
+    }
+    .rec-narrative {
+      font-size: 11px; color: #b0b3bd; line-height: 1.55;
+      padding: 6px 8px; background: #131722; border-radius: 4px;
+      margin-bottom: 6px; border-left: 2px solid #2a2e39;
+    }
+    .rec-note {
+      font-size: 11px; color: #9b9ea8; text-align: center;
+      margin-top: 6px; font-style: italic;
+    }
+
+    .divider { height: 1px; background: #2a2e39; margin: 7px 0; }
+
+    .setup-rows { display: flex; flex-direction: column; gap: 2px; }
     .setup-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 4px 6px;
-      background: #131722;
-      border-radius: 4px;
-      font-size: 11px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 3px 5px; background: #131722; border-radius: 3px; font-size: 11px;
     }
     .setup-row span:first-child { color: #9b9ea8; }
     .setup-row span:last-child  { font-weight: 600; }
-    .setup-row small { font-weight: 400; opacity: .65; }
+    .setup-row em { font-style: normal; font-weight: 400; opacity: .6; }
 
     /* Legend */
-    .legend-list { display: flex; flex-direction: column; gap: 4px; }
-    .legend-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9b9ea8; }
-    .legend-dot {
-      width: 10px; height: 10px;
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
+    .legend-list { display: flex; flex-direction: column; gap: 3px; }
+    .legend-item { display: flex; align-items: center; gap: 7px; font-size: 11px; color: #9b9ea8; }
+    .ldot { width: 9px; height: 9px; border-radius: 2px; flex-shrink: 0; }
 
     /* Footer */
     .footer {
-      flex-shrink: 0;
-      padding: 5px 12px;
-      font-size: 10px;
-      color: #555;
-      border-top: 1px solid #2a2e39;
-      background: #1a1d28;
+      flex-shrink: 0; padding: 4px 12px; font-size: 10px; color: #555;
+      border-top: 1px solid #2a2e39; background: #1a1d28;
     }
   </style>
 </head>
 <body>
 <div class="app">
 
-  <!-- ── Header ───────────────────────────────────── -->
+  <!-- Header -->
   <header class="header">
     <div class="header-left">
-      <div class="logo">📊 SMC 分析儀表板</div>
-
-      <input type="text" id="symbol-input" placeholder="輸入幣種（Enter 確認）" />
-
+      <div class="logo">📊 SMC 多框架分析</div>
+      <input type="text" id="symbol-input" placeholder="幣種（Enter 確認）" />
       <div class="sym-group">
         <button class="sym-btn active" data-symbol="BTCUSDT">BTC</button>
         <button class="sym-btn"        data-symbol="ETHUSDT">ETH</button>
@@ -260,8 +192,8 @@
         <button class="sym-btn"        data-symbol="DOGEUSDT">DOGE</button>
       </div>
     </div>
-
     <div class="header-right">
+      <span style="font-size:10px;color:#555">圖表時框：</span>
       <div class="tf-group">
         <button class="tf-btn"        data-interval="15m">15m</button>
         <button class="tf-btn"        data-interval="1h">1H</button>
@@ -273,58 +205,119 @@
     </div>
   </header>
 
-  <!-- ── Main ─────────────────────────────────────── -->
+  <!-- Main -->
   <div class="main">
 
     <!-- Chart -->
     <div class="chart-wrap">
+      <div class="chart-tf-label">
+        圖表標記基於<strong id="chart-tf-label">所選時框</strong>的 SMC 結構 &nbsp;|&nbsp;
+        分析面板永遠使用 <strong>1D → 4H → 1H</strong> 由大到小分析
+      </div>
       <div id="chart"></div>
     </div>
 
-    <!-- Side Panel -->
+    <!-- Analysis Panel -->
     <aside class="panel">
 
-      <!-- Market Structure -->
+      <!-- Current Price -->
+      <div class="price-header">
+        <span class="price-symbol" id="price-symbol">BTCUSDT</span>
+        <span id="current-price">—</span>
+      </div>
+
+      <!-- MTF Trend Overview -->
       <div class="sec">
-        <div class="sec-title">
-          <span>市場結構</span>
-          <span id="trend-badge">—</span>
+        <div class="sec-header" onclick="toggleSec('mtf-trends-body')">
+          <span class="sec-title">多框架趨勢對齊</span>
+          <span class="sec-toggle" id="toggle-mtf-trends-body">▲</span>
         </div>
-        <div class="price-row">
-          <span class="price-label">現價</span>
-          <span id="current-price">—</span>
+        <div id="mtf-trends-body" class="sec-body">
+          <div class="mtf-trends">
+            <div class="mtf-tf">
+              <div class="mtf-tf-label">1D 大方向</div>
+              <div id="trend-d1">—</div>
+            </div>
+            <div class="mtf-tf">
+              <div class="mtf-tf-label">4H 中期</div>
+              <div id="trend-h4">—</div>
+            </div>
+            <div class="mtf-tf">
+              <div class="mtf-tf-label">1H 入場</div>
+              <div id="trend-h1">—</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      <!-- BOS / CHoCH Events -->
+      <!-- 1D -->
       <div class="sec">
-        <div class="sec-title">結構事件（BOS / CHoCH）</div>
-        <div id="recent-events"></div>
+        <div class="sec-header" onclick="toggleSec('d1-body')">
+          <div class="sec-badge">
+            <span class="sec-title">1D &nbsp;大方向 &amp; 關鍵區域</span>
+          </div>
+          <span class="sec-toggle" id="toggle-d1-body">▲</span>
+        </div>
+        <div id="d1-body" class="sec-body">
+          <div id="d1-content"></div>
+        </div>
       </div>
 
-      <!-- Key Levels -->
+      <!-- 4H -->
       <div class="sec">
-        <div class="sec-title">關鍵區域（OB / EQH / EQL / FVG）</div>
-        <div id="key-levels"></div>
+        <div class="sec-header" onclick="toggleSec('h4-body')">
+          <div class="sec-badge">
+            <span class="sec-title">4H &nbsp;進場區域 &amp; OB</span>
+          </div>
+          <span class="sec-toggle" id="toggle-h4-body">▲</span>
+        </div>
+        <div id="h4-body" class="sec-body">
+          <div id="h4-content"></div>
+        </div>
       </div>
 
-      <!-- Trade Setup -->
+      <!-- 1H -->
       <div class="sec">
-        <div class="sec-title">操作建議</div>
-        <div id="trade-setup"></div>
+        <div class="sec-header" onclick="toggleSec('h1-body')">
+          <div class="sec-badge">
+            <span class="sec-title">1H &nbsp;入場時機 &amp; 結構事件</span>
+          </div>
+          <span class="sec-toggle" id="toggle-h1-body">▲</span>
+        </div>
+        <div id="h1-body" class="sec-body">
+          <div id="h1-content"></div>
+        </div>
+      </div>
+
+      <!-- Recommendation -->
+      <div class="sec">
+        <div class="sec-header" onclick="toggleSec('rec-body')">
+          <span class="sec-title">綜合操作建議</span>
+          <span class="sec-toggle" id="toggle-rec-body">▲</span>
+        </div>
+        <div id="rec-body" class="sec-body">
+          <div id="recommendation"></div>
+        </div>
       </div>
 
       <!-- Legend -->
       <div class="sec">
-        <div class="sec-title">圖例說明</div>
-        <div class="legend-list">
-          <div class="legend-item"><span class="legend-dot" style="background:#26a69a"></span>Bull OB / BOS ↑</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#ef5350"></span>Bear OB / BOS ↓</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#f39c12"></span>CHoCH（結構翻轉）</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#f1c40f"></span>EQH / EQL（等高低點）</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#1abc9c"></span>FVG 多頭缺口</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#e74c3c"></span>FVG 空頭缺口</div>
-          <div class="legend-item"><span class="legend-dot" style="background:#3498db"></span>進場 / 止損 / 止盈</div>
+        <div class="sec-header" onclick="toggleSec('legend-body')">
+          <span class="sec-title">圖例說明</span>
+          <span class="sec-toggle" id="toggle-legend-body">▼</span>
+        </div>
+        <div id="legend-body" class="sec-body collapsed">
+          <div class="legend-list">
+            <div class="legend-item"><span class="ldot" style="background:#26a69a"></span>Bull OB / BOS ↑</div>
+            <div class="legend-item"><span class="ldot" style="background:#ef5350"></span>Bear OB / BOS ↓</div>
+            <div class="legend-item"><span class="ldot" style="background:#f39c12"></span>CHoCH（結構翻轉）</div>
+            <div class="legend-item"><span class="ldot" style="background:#f1c40f"></span>EQH / EQL（等高低點）</div>
+            <div class="legend-item"><span class="ldot" style="background:#1abc9c"></span>FVG 多頭缺口</div>
+            <div class="legend-item"><span class="ldot" style="background:#e74c3c"></span>FVG 空頭缺口</div>
+            <div class="legend-item"><span class="ldot" style="background:#3498db"></span>進場位置</div>
+            <div class="legend-item"><span class="ldot" style="background:#ef5350"></span>止損 SL</div>
+            <div class="legend-item"><span class="ldot" style="background:#2ecc71"></span>止盈 TP1 / TP2</div>
+          </div>
         </div>
       </div>
 
@@ -333,10 +326,45 @@
 
   <!-- Footer -->
   <div class="footer">
-    資料來源：Binance 公開 API &nbsp;|&nbsp; 僅供技術分析參考，非投資建議
+    資料來源：Binance 公開 API &nbsp;|&nbsp;
+    分析邏輯：1D 定方向 → 4H 找進場區 → 1H 確認入場時機 &nbsp;|&nbsp;
+    僅供技術分析參考，非投資建議
   </div>
 
 </div>
+
+<script>
+  // Collapsible sections
+  function toggleSec(id) {
+    const body   = document.getElementById(id);
+    const toggle = document.getElementById('toggle-' + id);
+    const collapsed = body.classList.toggle('collapsed');
+    toggle.textContent = collapsed ? '▼' : '▲';
+  }
+
+  // Update chart TF label
+  document.querySelectorAll('.tf-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('chart-tf-label').textContent = btn.textContent;
+    });
+  });
+
+  // Update symbol label
+  document.querySelectorAll('.sym-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('price-symbol').textContent = btn.dataset.symbol;
+    });
+  });
+
+  document.getElementById('symbol-input').addEventListener('keypress', e => {
+    if (e.key === 'Enter') {
+      document.getElementById('price-symbol').textContent = e.target.value.trim().toUpperCase();
+    }
+  });
+
+  // Set initial chart TF label
+  document.getElementById('chart-tf-label').textContent = '4H';
+</script>
 
 <script src="smc.js"></script>
 <script src="app.js"></script>
