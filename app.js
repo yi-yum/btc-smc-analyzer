@@ -27,10 +27,10 @@ let _tradesCache = null;
 function getSheetsUrl() { return (localStorage.getItem(SHEETS_URL_KEY) || '').trim(); }
 function setSheetsUrl(url) {
   localStorage.setItem(SHEETS_URL_KEY, url.trim());
-  updateSheetsStatus('connecting');
+  updateSheetsStatus(url.trim() ? 'connecting' : 'none');
   initTradesCache().then(() => {
     renderTradeLog();
-    updateSheetsStatus(url.trim() ? 'ok' : 'none');
+    // 狀態由 initTradesCache 內部設定，不在這裡覆蓋
   });
 }
 
@@ -39,16 +39,19 @@ async function initTradesCache() {
   const url = getSheetsUrl();
   if (url) {
     try {
-      const res  = await fetch(`${url}?t=${Date.now()}`);
+      const res = await fetch(`${url}?t=${Date.now()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       if (Array.isArray(data.trades)) {
         _tradesCache = data.trades;
-        localStorage.setItem(TRADES_KEY, JSON.stringify(data.trades)); // 本地備份
+        localStorage.setItem(TRADES_KEY, JSON.stringify(data.trades));
         updateSheetsStatus('ok');
         return;
       }
+      // 有回應但格式不對（例如貼了 Sheets 網址而非 Apps Script 網址）
+      throw new Error('回應格式不正確，請確認是否貼了 Apps Script 網址');
     } catch (e) {
-      console.warn('Sheets 讀取失敗，使用本地快取：', e);
+      console.warn('Sheets 讀取失敗：', e.message);
       updateSheetsStatus('error');
     }
   }
