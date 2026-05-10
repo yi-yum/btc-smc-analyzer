@@ -72,17 +72,49 @@ function loadTrades() {
 function saveTrades(trades) {
   _tradesCache = trades;
   localStorage.setItem(TRADES_KEY, JSON.stringify(trades));
+  syncToSheets(trades); // 背景同步，不阻塞 UI
+}
 
+// 用 URLSearchParams 傳送（simple request，不觸發 CORS preflight）
+function syncToSheets(trades) {
   const url = getSheetsUrl();
   if (!url) return;
 
-  // 背景同步，不阻塞 UI
-  fetch(url, {
-    method:  'POST',
-    mode:    'no-cors',              // 避免 CORS preflight
-    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-    body:    JSON.stringify({ trades }),
-  }).catch(e => console.warn('Sheets 寫入失敗：', e));
+  const body = new URLSearchParams();
+  body.append('data', JSON.stringify({ trades }));
+
+  fetch(url, { method: 'POST', body })
+    .then(res => {
+      if (!res.ok) console.warn('Sheets 寫入失敗 HTTP', res.status);
+    })
+    .catch(e => console.warn('Sheets 寫入失敗：', e.message));
+}
+
+// 手動強制同步目前所有記錄
+async function forceSyncToSheets() {
+  const url = getSheetsUrl();
+  if (!url) { alert('尚未設定 Google Sheets 網址'); return; }
+
+  const btn = document.getElementById('sync-btn');
+  if (btn) { btn.textContent = '同步中…'; btn.disabled = true; }
+
+  try {
+    const body = new URLSearchParams();
+    body.append('data', JSON.stringify({ trades: loadTrades() }));
+
+    const res  = await fetch(url, { method: 'POST', body });
+    const data = await res.json();
+
+    if (data.success) {
+      if (btn) btn.textContent = '✓ 同步成功';
+      setTimeout(() => { if (btn) { btn.textContent = '☁ 手動同步'; btn.disabled = false; } }, 2000);
+    } else {
+      throw new Error(data.error || '未知錯誤');
+    }
+  } catch (e) {
+    alert(`同步失敗：${e.message}\n\n請確認 Apps Script 網址正確且已部署`);
+    if (btn) { btn.textContent = '☁ 手動同步'; btn.disabled = false; }
+  }
 }
 
 // 狀態指示器

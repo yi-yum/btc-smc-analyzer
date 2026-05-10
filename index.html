@@ -164,6 +164,8 @@
     }
     #sheets-connect-btn:hover { background:#26a69a; border-color:#26a69a; color:#fff; }
     #sheets-clear-btn:hover   { background:#ef5350; border-color:#ef5350; color:#fff; }
+    #sync-btn:hover           { background:#f39c12; border-color:#f39c12; color:#fff; }
+    #sync-btn:disabled        { opacity:.5; cursor:default; }
     .sheets-help-link {
       margin-left: auto; font-size: 10px; color: #555;
       text-decoration: none; white-space: nowrap;
@@ -365,8 +367,7 @@
             <div class="sheets-btn-row">
               <button id="sheets-connect-btn">連接</button>
               <button id="sheets-clear-btn">清除</button>
-              <a href="https://github.com/你的帳號/smc-dashboard/blob/master/google-apps-script/Code.gs"
-                 target="_blank" class="sheets-help-link">📄 查看設定步驟</a>
+              <button id="sync-btn" onclick="forceSyncToSheets()">☁ 手動同步</button>
             </div>
           </div>
 

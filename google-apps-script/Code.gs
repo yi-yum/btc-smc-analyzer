@@ -28,8 +28,18 @@ function doGet(e) {
 // ── 儲存所有交易記錄 ────────────────────────────────────────────
 function doPost(e) {
   try {
-    const payload = JSON.parse(e.postData.contents);
-    const sheet   = getSheet();
+    // 支援 URLSearchParams 格式（e.parameter.data）
+    // 也向下相容 JSON body（e.postData.contents）
+    let payload;
+    if (e.parameter && e.parameter.data) {
+      payload = JSON.parse(e.parameter.data);
+    } else if (e.postData && e.postData.contents) {
+      payload = JSON.parse(e.postData.contents);
+    } else {
+      throw new Error('找不到資料，請確認請求格式');
+    }
+
+    const sheet = getSheet();
 
     if (Array.isArray(payload.trades)) {
       // A1 存 JSON（供網頁讀取）
@@ -39,7 +49,7 @@ function doPost(e) {
       writeTable(sheet, payload.trades);
     }
 
-    return json({ success: true });
+    return json({ success: true, count: payload.trades?.length ?? 0 });
   } catch (err) {
     return json({ success: false, error: err.message });
   }
