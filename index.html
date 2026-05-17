@@ -172,6 +172,72 @@
     }
     .sheets-help-link:hover { color: #3498db; }
 
+    /* ── JSONBin 設定區塊 ────────────────────────────── */
+    .jsonbin-box {
+      background: #131722; border: 1px solid #2a2e39; border-radius: 5px;
+      padding: 8px 9px; margin-bottom: 8px;
+    }
+    .jsonbin-desc {
+      font-size: 10px; color: #555; margin-bottom: 6px; line-height: 1.5;
+    }
+    #jsonbin-connect-btn:hover { background:#26a69a; border-color:#26a69a; color:#fff; }
+    #jsonbin-clear-btn:hover   { background:#ef5350; border-color:#ef5350; color:#fff; }
+    #jsonbin-sync-btn:hover    { background:#f39c12; border-color:#f39c12; color:#fff; }
+    #jsonbin-sync-btn:disabled { opacity:.5; cursor:default; }
+
+    /* ── Manual Trade Form ──────────────────────────── */
+    .manual-box {
+      background: #131722; border: 1px solid #2a2e39; border-radius: 5px;
+      padding: 8px 9px; margin-bottom: 8px;
+    }
+    .manual-box-title {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; font-weight: 600; color: #9b9ea8; margin-bottom: 0;
+      cursor: pointer; user-select: none;
+    }
+    .manual-box-title:hover { color: #d1d4dc; }
+    #manual-form-body { margin-top: 8px; }
+    .manual-dir-row { display: flex; gap: 5px; margin-bottom: 6px; }
+    .manual-dir-btn {
+      flex: 1; padding: 5px; border-radius: 4px; cursor: pointer;
+      font-size: 12px; font-weight: 700; border: 1px solid #363c4e;
+      background: #2a2e39; color: #9b9ea8; transition: all .15s;
+    }
+    .manual-dir-btn.active-long  { background: #26a69a22; border-color: #26a69a; color: #26a69a; }
+    .manual-dir-btn.active-short { background: #ef535022; border-color: #ef5350; color: #ef5350; }
+    .manual-input-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 6px;
+    }
+    .manual-field label {
+      display: block; font-size: 10px; color: #555; margin-bottom: 2px;
+    }
+    .manual-field input {
+      width: 100%; background: #1a1d28; border: 1px solid #2a2e39;
+      color: #d1d4dc; padding: 4px 7px; border-radius: 4px;
+      font-size: 12px; outline: none;
+    }
+    .manual-field input:focus { border-color: #3498db; }
+    .manual-rr-row {
+      display: flex; gap: 6px; justify-content: center;
+      font-size: 11px; color: #9b9ea8; margin-bottom: 6px;
+      background: #0d0f17; border-radius: 4px; padding: 5px;
+    }
+    .manual-rr-row span { font-weight: 700; }
+    .manual-note-row input {
+      width: 100%; background: #1a1d28; border: 1px solid #2a2e39;
+      color: #d1d4dc; padding: 4px 7px; border-radius: 4px;
+      font-size: 11px; outline: none; margin-bottom: 6px;
+    }
+    .manual-note-row input:focus { border-color: #3498db; }
+    #manual-submit-btn {
+      display: block; width: 100%; padding: 7px;
+      background: #2962ff22; border: 1px solid #2962ff; color: #2962ff;
+      border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: 700;
+      transition: all .15s; text-align: center;
+    }
+    #manual-submit-btn:hover { background: #2962ff; color: #fff; }
+    #manual-submit-btn:disabled { opacity: .4; cursor: default; }
+
     /* ── Trade Journal ───────────────────────────────── */
     .trade-toolbar {
       display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;
@@ -276,7 +342,13 @@
     <div class="chart-wrap">
       <div class="chart-label">
         圖表標記：<strong id="chart-tf-label">4H</strong> SMC 結構 &nbsp;|&nbsp;
-        分析面板：<strong>1D → 4H → 1H</strong> 由大到小
+        分析面板：<strong>1D → 4H → 1H</strong> 由大到小 &nbsp;|&nbsp;
+        <button id="session-toggle-btn"
+          onclick="toggleSessionMarkers()"
+          title="顯示/隱藏 亞/歐/美 開盤時間標記"
+          style="background:transparent;border:none;color:#9b9ea8;cursor:pointer;font-size:11px;padding:0">
+          🕐 時段標記 ON
+        </button>
       </div>
       <div id="chart"></div>
     </div>
@@ -351,10 +423,35 @@
         </div>
         <div id="trade-body" class="sec-body">
 
-          <!-- Google Sheets 設定 -->
+          <!-- JSONBin 設定（推薦）-->
+          <div class="jsonbin-box">
+            <div class="sheets-box-title">
+              <span>🗂 JSONBin 雲端同步 <span style="color:#26a69a;font-size:9px">推薦</span></span>
+              <span id="jsonbin-status" style="font-size:10px;color:#555">—</span>
+            </div>
+            <div class="jsonbin-desc">
+              免費・免部署・30秒設定完成<br>
+              ① <a href="https://jsonbin.io" target="_blank" style="color:#3498db">jsonbin.io</a> 免費註冊
+              → ② My Account → Master Key 複製金鑰
+              → ③ NEW BIN → 貼上 <code style="color:#f39c12">{"trades":[]}</code> 存檔 → 複製 Bin ID
+            </div>
+            <div class="sheets-input-row">
+              <input type="password" id="jsonbin-key-input" placeholder="Master Key（$2a$10$…）" />
+            </div>
+            <div class="sheets-input-row">
+              <input type="text" id="jsonbin-id-input" placeholder="Bin ID（如 664abc123…）" />
+            </div>
+            <div class="sheets-btn-row">
+              <button id="jsonbin-connect-btn">連接</button>
+              <button id="jsonbin-clear-btn">清除</button>
+              <button id="jsonbin-sync-btn" onclick="forceJsonbinSync()">☁ 手動同步</button>
+            </div>
+          </div>
+
+          <!-- Google Sheets 設定（備選）-->
           <div class="sheets-box">
             <div class="sheets-box-title">
-              <span>☁️ Google Sheets 同步</span>
+              <span>📊 Google Sheets 同步 <span style="color:#555;font-size:9px">備選</span></span>
               <span id="sheets-status" style="font-size:10px;color:#555">—</span>
             </div>
             <div class="sheets-input-row">
@@ -368,6 +465,45 @@
               <button id="sheets-connect-btn">連接</button>
               <button id="sheets-clear-btn">清除</button>
               <button id="sync-btn" onclick="forceSyncToSheets()">☁ 手動同步</button>
+            </div>
+          </div>
+
+          <!-- 手動建立交易計畫 -->
+          <div class="manual-box">
+            <div class="manual-box-title" onclick="toggleManualForm()">
+              <span>✏️ 手動建立計畫</span>
+              <span id="manual-form-toggle">▼</span>
+            </div>
+            <div id="manual-form-body" style="display:none">
+              <div class="manual-dir-row">
+                <button class="manual-dir-btn" id="dir-long-btn"  onclick="setManualDir('LONG')">▲ LONG 做多</button>
+                <button class="manual-dir-btn" id="dir-short-btn" onclick="setManualDir('SHORT')">▼ SHORT 做空</button>
+              </div>
+              <div class="manual-input-grid">
+                <div class="manual-field">
+                  <label>進場價 Entry</label>
+                  <input type="number" id="m-entry" placeholder="0.00" step="any" oninput="updateManualRR()" />
+                </div>
+                <div class="manual-field">
+                  <label>止損 SL</label>
+                  <input type="number" id="m-sl" placeholder="0.00" step="any" oninput="updateManualRR()" />
+                </div>
+                <div class="manual-field">
+                  <label>止盈 TP1</label>
+                  <input type="number" id="m-tp1" placeholder="0.00" step="any" oninput="updateManualRR()" />
+                </div>
+                <div class="manual-field">
+                  <label>止盈 TP2</label>
+                  <input type="number" id="m-tp2" placeholder="0.00" step="any" oninput="updateManualRR()" />
+                </div>
+              </div>
+              <div class="manual-rr-row">
+                風險報酬：TP1 <span id="m-rr1">—</span> &nbsp;|&nbsp; TP2 <span id="m-rr2">—</span>
+              </div>
+              <div class="manual-note-row">
+                <input type="text" id="m-note" placeholder="備註（選填，如：等反彈至供應區）" />
+              </div>
+              <button id="manual-submit-btn" onclick="recordManualTrade()" disabled>📝 記錄計畫到模擬倉</button>
             </div>
           </div>
 
@@ -400,6 +536,11 @@
             <div class="legend-item"><span class="ldot" style="background:#3498db"></span>進場位置</div>
             <div class="legend-item"><span class="ldot" style="background:#ef5350"></span>止損 SL</div>
             <div class="legend-item"><span class="ldot" style="background:#2ecc71"></span>止盈 TP1 / TP2</div>
+            <div class="legend-item" style="margin-top:6px;border-top:1px solid #2a2e39;padding-top:6px">
+              <span class="ldot" style="background:#f39c12"></span>亞 — 亞洲開盤 00:00 UTC
+            </div>
+            <div class="legend-item"><span class="ldot" style="background:#3498db"></span>歐 — 歐洲開盤 07:00 UTC</div>
+            <div class="legend-item"><span class="ldot" style="background:#9b59b6"></span>美 — 美股開盤 13:30 UTC</div>
           </div>
         </div>
       </div>

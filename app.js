@@ -1,20 +1,62 @@
 // app.js — Multi-Timeframe SMC Dashboard + Simulated Trade Journal
 
-const BINANCE_API    = 'https://api.binance.com/api/v3/klines';
-const TICKER_API     = 'https://api.binance.com/api/v3/ticker/price';
-const TRADES_KEY     = 'smc_sim_trades';
-const SHEETS_URL_KEY = 'smc_sheets_url';
-const POLL_INTERVAL  = 60_000; // ms
+const BINANCE_API      = 'https://api.binance.com/api/v3/klines';
+const TICKER_API       = 'https://api.binance.com/api/v3/ticker/price';
+const TRADES_KEY       = 'smc_sim_trades';
+const SHEETS_URL_KEY   = 'smc_sheets_url';
+const JSONBIN_KEY_KEY  = 'smc_jsonbin_key';
+const JSONBIN_ID_KEY   = 'smc_jsonbin_id';
+const POLL_INTERVAL    = 60_000; // ms
 
 let chart        = null;
 let candleSeries = null;
 let volSeries    = null;
 let activePriceLines = [];
 
-let currentSymbol   = 'BTCUSDT';
-let currentInterval = '4h';
-let latestReport    = null;
-let pollingTimer    = null;
+let currentSymbol      = 'BTCUSDT';
+let currentInterval    = '4h';
+let latestReport       = null;
+let pollingTimer       = null;
+let currentChartBars   = null;   // for session markers
+let sessionMarkersOn   = true;
+
+// ── 交易時段開盤（UTC）──────────────────────────────────────────────
+const SESSIONS = [
+  { name: '亞', hour: 0,  minute: 0,  color: '#f39c12' }, // 00:00 UTC — 亞洲開盤 (東京 09:00 JST)
+  { name: '歐', hour: 7,  minute: 0,  color: '#3498db' }, // 07:00 UTC — 歐洲開盤 (法蘭克福/倫敦)
+  { name: '美', hour: 13, minute: 30, color: '#9b59b6' }, // 13:30 UTC — 美股開盤 (NYSE)
+];
+
+function getSessionMarkers(bars, interval) {
+  if (!sessionMarkersOn || !bars || interval === '1d') return [];
+  const intMin = { '15m': 15, '30m': 30, '1h': 60, '4h': 240 }[interval] ?? 60;
+  const markers = [];
+  bars.forEach(bar => {
+    const d = new Date(bar.time * 1000);
+    const barStart = d.getUTCHours() * 60 + d.getUTCMinutes();
+    const barEnd   = barStart + intMin;
+    SESSIONS.forEach(s => {
+      const sm = s.hour * 60 + s.minute;
+      if (sm >= barStart && sm < barEnd) {
+        markers.push({ time: bar.time, position: 'belowBar', color: s.color,
+          shape: 'circle', text: s.name, size: 0.8 });
+      }
+    });
+  });
+  return markers;
+}
+
+function toggleSessionMarkers() {
+  sessionMarkersOn = !sessionMarkersOn;
+  const btn = document.getElementById('session-toggle-btn');
+  if (btn) {
+    btn.style.opacity = sessionMarkersOn ? '1' : '0.4';
+    btn.textContent   = `🕐 時段標記 ${sessionMarkersOn ? 'ON' : 'OFF'}`;
+  }
+  if (currentChartBars && window._lastChartAnalysis && latestReport) {
+    renderChartOverlays(window._lastChartAnalysis, latestReport.setup);
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════
 //  GOOGLE SHEETS 整合
@@ -34,8 +76,22 @@ function setSheetsUrl(url) {
   });
 }
 
-// 從 Sheets（或 localStorage 備援）初始化快取
+// 從雲端（JSONBin 優先 → Sheets → localStorage 備援）初始化快取
 async function initTradesCache() {
+  const jb = getJsonbinConfig();
+  if (jb.key && jb.id) {
+    try {
+      const trades = await loadFromJsonbin();
+      _tradesCache = trades;
+      localStorage.setItem(TRADES_KEY, JSON.stringify(trades));
+      updateJsonbinStatus('ok');
+      return;
+    } catch (e) {
+      console.warn('JSONBin 讀取失敗：', e.message);
+      updateJsonbinStatus('error');
+    }
+  }
+
   const url = getSheetsUrl();
   if (url) {
     try {
@@ -48,13 +104,13 @@ async function initTradesCache() {
         updateSheetsStatus('ok');
         return;
       }
-      // 有回應但格式不對（例如貼了 Sheets 網址而非 Apps Script 網址）
       throw new Error('回應格式不正確，請確認是否貼了 Apps Script 網址');
     } catch (e) {
       console.warn('Sheets 讀取失敗：', e.message);
       updateSheetsStatus('error');
     }
   }
+
   try { _tradesCache = JSON.parse(localStorage.getItem(TRADES_KEY) || '[]'); }
   catch { _tradesCache = []; }
 }
@@ -68,11 +124,16 @@ function loadTrades() {
   return _tradesCache;
 }
 
-// 寫（同步到 localStorage + 背景推送 Sheets）
+// 寫（同步到 localStorage + 背景推送雲端）
 function saveTrades(trades) {
   _tradesCache = trades;
   localStorage.setItem(TRADES_KEY, JSON.stringify(trades));
-  syncToSheets(trades); // 背景同步，不阻塞 UI
+  // 優先用 JSONBin，否則 Google Sheets
+  if (getJsonbinConfig().key && getJsonbinConfig().id) {
+    syncToJsonbin(trades);
+  } else {
+    syncToSheets(trades);
+  }
 }
 
 // 用 URLSearchParams 傳送（simple request，不觸發 CORS preflight）
@@ -130,6 +191,198 @@ function updateSheetsStatus(state) {
   const [text, color] = map[state] || map.none;
   el.textContent  = text;
   el.style.color  = color;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  JSONBIN.IO 整合（更方便的雲端儲存：只需 API Key + Bin ID）
+//  1. 前往 https://jsonbin.io 免費註冊
+//  2. My Account → Master Key → 複製 $2a$10$... 開頭的金鑰
+//  3. 建立 Bin：點 NEW BIN → 貼上 {"trades":[]} → 儲存
+//  4. 複製 Bin ID（網址最後一段，如 664abc...）
+//  5. 貼到下方輸入框並點「連接」
+// ══════════════════════════════════════════════════════════════════
+const JSONBIN_API = 'https://api.jsonbin.io/v3/b';
+
+function getJsonbinConfig() {
+  return {
+    key: (localStorage.getItem(JSONBIN_KEY_KEY) || '').trim(),
+    id:  (localStorage.getItem(JSONBIN_ID_KEY)  || '').trim(),
+  };
+}
+
+function setJsonbinConfig(key, id) {
+  localStorage.setItem(JSONBIN_KEY_KEY, key.trim());
+  localStorage.setItem(JSONBIN_ID_KEY,  id.trim());
+  updateJsonbinStatus(key && id ? 'connecting' : 'none');
+  if (key && id) {
+    initTradesCache().then(() => renderTradeLog());
+  }
+}
+
+async function loadFromJsonbin() {
+  const { key, id } = getJsonbinConfig();
+  const res = await fetch(`${JSONBIN_API}/${id}`, {
+    headers: { 'X-Master-Key': key, 'X-Bin-Meta': 'false' },
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data.trades) ? data.trades : [];
+}
+
+function syncToJsonbin(trades) {
+  const { key, id } = getJsonbinConfig();
+  if (!key || !id) return;
+  fetch(`${JSONBIN_API}/${id}`, {
+    method:  'PUT',
+    headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
+    body:    JSON.stringify({ trades }),
+  }).catch(e => console.warn('JSONBin 寫入失敗：', e.message));
+}
+
+async function forceJsonbinSync() {
+  const { key, id } = getJsonbinConfig();
+  if (!key || !id) { alert('請先填入 JSONBin API Key 和 Bin ID'); return; }
+  const btn = document.getElementById('jsonbin-sync-btn');
+  if (btn) { btn.textContent = '同步中…'; btn.disabled = true; }
+  try {
+    const res = await fetch(`${JSONBIN_API}/${id}`, {
+      method:  'PUT',
+      headers: { 'X-Master-Key': key, 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ trades: loadTrades() }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (btn) btn.textContent = '✓ 同步成功';
+    updateJsonbinStatus('ok');
+    setTimeout(() => { if (btn) { btn.textContent = '☁ 手動同步'; btn.disabled = false; } }, 2000);
+  } catch (e) {
+    alert(`JSONBin 同步失敗：${e.message}`);
+    if (btn) { btn.textContent = '☁ 手動同步'; btn.disabled = false; }
+  }
+}
+
+function updateJsonbinStatus(state) {
+  const el = document.getElementById('jsonbin-status');
+  if (!el) return;
+  const map = {
+    none:       ['—',       '#555'],
+    connecting: ['連接中…', '#f39c12'],
+    ok:         ['✓ 已連接', '#26a69a'],
+    error:      ['✗ 連接失敗', '#ef5350'],
+  };
+  const [text, color] = map[state] || map.none;
+  el.textContent = text;
+  el.style.color = color;
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  MANUAL TRADE PLAN
+// ══════════════════════════════════════════════════════════════════
+let manualDir = null;
+
+function toggleManualForm() {
+  const body    = document.getElementById('manual-form-body');
+  const toggle  = document.getElementById('manual-form-toggle');
+  const visible = body.style.display !== 'none';
+  body.style.display  = visible ? 'none' : 'block';
+  toggle.textContent  = visible ? '▼' : '▲';
+}
+
+function setManualDir(dir) {
+  manualDir = dir;
+  document.getElementById('dir-long-btn') .className = 'manual-dir-btn' + (dir === 'LONG'  ? ' active-long'  : '');
+  document.getElementById('dir-short-btn').className = 'manual-dir-btn' + (dir === 'SHORT' ? ' active-short' : '');
+  updateManualRR();
+}
+
+function updateManualRR() {
+  const entry = parseFloat(document.getElementById('m-entry').value);
+  const sl    = parseFloat(document.getElementById('m-sl').value);
+  const tp1   = parseFloat(document.getElementById('m-tp1').value);
+  const tp2   = parseFloat(document.getElementById('m-tp2').value);
+
+  const valid = manualDir && !isNaN(entry) && !isNaN(sl) && !isNaN(tp1) && !isNaN(tp2)
+             && entry > 0 && sl > 0 && tp1 > 0 && tp2 > 0;
+
+  document.getElementById('manual-submit-btn').disabled = !valid;
+
+  if (!valid) {
+    document.getElementById('m-rr1').textContent = '—';
+    document.getElementById('m-rr2').textContent = '—';
+    return;
+  }
+
+  const risk = Math.abs(entry - sl);
+  if (risk === 0) return;
+
+  const rr1 = manualDir === 'LONG'
+    ? ((tp1 - entry) / risk).toFixed(2)
+    : ((entry - tp1) / risk).toFixed(2);
+  const rr2 = manualDir === 'LONG'
+    ? ((tp2 - entry) / risk).toFixed(2)
+    : ((entry - tp2) / risk).toFixed(2);
+
+  const c1 = parseFloat(rr1) >= 1 ? '#2ecc71' : '#f39c12';
+  const c2 = parseFloat(rr2) >= 1 ? '#2ecc71' : '#f39c12';
+  document.getElementById('m-rr1').innerHTML = `<span style="color:${c1}">1:${rr1}</span>`;
+  document.getElementById('m-rr2').innerHTML = `<span style="color:${c2}">1:${rr2}</span>`;
+}
+
+function recordManualTrade() {
+  const entry = parseFloat(document.getElementById('m-entry').value);
+  const sl    = parseFloat(document.getElementById('m-sl').value);
+  const tp1   = parseFloat(document.getElementById('m-tp1').value);
+  const tp2   = parseFloat(document.getElementById('m-tp2').value);
+  const note  = document.getElementById('m-note').value.trim();
+
+  if (!manualDir || isNaN(entry) || isNaN(sl) || isNaN(tp1) || isNaN(tp2)) return;
+
+  const risk = Math.abs(entry - sl);
+  const rr1  = manualDir === 'LONG'
+    ? ((tp1 - entry) / risk).toFixed(2)
+    : ((entry - tp1) / risk).toFixed(2);
+  const rr2  = manualDir === 'LONG'
+    ? ((tp2 - entry) / risk).toFixed(2)
+    : ((entry - tp2) / risk).toFixed(2);
+
+  const trade = {
+    id:         Date.now(),
+    symbol:     currentSymbol,
+    direction:  manualDir,
+    entry, sl, tp1, tp2,
+    rr1, rr2,
+    confidence: 'manual',
+    trends:     latestReport?.trends || { d1: '—', h4: '—', h1: '—' },
+    note:       note.slice(0, 120) || '手動建立',
+    openTime:   Date.now(),
+    openPrice:  entry,
+    closeTime:  null,
+    closePrice: null,
+    status:     'open',
+    pnlPct:     null,
+    tp1Hit:     false,
+  };
+
+  const trades = loadTrades();
+  trades.unshift(trade);
+  saveTrades(trades);
+  renderTradeLog();
+  expandSec('trade-body');
+  if (!pollingTimer) startPolling();
+
+  // 重置表單
+  ['m-entry','m-sl','m-tp1','m-tp2','m-note'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  manualDir = null;
+  document.getElementById('dir-long-btn') .className = 'manual-dir-btn';
+  document.getElementById('dir-short-btn').className = 'manual-dir-btn';
+  document.getElementById('m-rr1').textContent = '—';
+  document.getElementById('m-rr2').textContent = '—';
+  document.getElementById('manual-submit-btn').disabled = true;
+
+  const btn = document.getElementById('manual-submit-btn');
+  btn.textContent = '✓ 已記錄！';
+  setTimeout(() => { btn.textContent = '📝 記錄計畫到模擬倉'; }, 2000);
 }
 
 function recordTrade() {
@@ -436,14 +689,16 @@ function renderChartOverlays(analysis, mtfSetup) {
   const { structure, orderBlocks, fvgs, equalLevels } = analysis;
   const LS = LightweightCharts.LineStyle;
 
-  const markers = structure.events.slice(-15).map(e => ({
+  const structMarkers = structure.events.slice(-15).map(e => ({
     time:     e.time,
     position: e.direction === 'bullish' ? 'belowBar' : 'aboveBar',
     color:    e.type === 'CHoCH' ? '#f39c12' : (e.direction === 'bullish' ? '#26a69a' : '#ef5350'),
     shape:    e.direction === 'bullish' ? 'arrowUp' : 'arrowDown',
     text:     e.type, size: 1,
   }));
-  candleSeries.setMarkers(markers.sort((a, b) => a.time - b.time));
+  const sesMarkers = getSessionMarkers(currentChartBars, currentInterval);
+  const allMarkers = [...structMarkers, ...sesMarkers].sort((a, b) => a.time - b.time);
+  candleSeries.setMarkers(allMarkers);
 
   orderBlocks.bullishOBs.filter(o => o.active).slice(-3).forEach(o => {
     addLine({ price: o.high, color: '#26a69a', lineWidth: 1, lineStyle: LS.Dashed, axisLabelVisible: true, title: '🟢 OB' });
@@ -707,6 +962,8 @@ async function loadAndAnalyze() {
       currentInterval === '4h' ? barsH4 :
       currentInterval === '1h' ? barsH1 : extraBars;
 
+    currentChartBars = chartBars;
+
     candleSeries.setData(chartBars.map(b => ({ time:b.time, open:b.open, high:b.high, low:b.low, close:b.close })));
     volSeries.setData(chartBars.map(b => ({ time:b.time, value:b.volume,
       color: b.close >= b.open ? '#26a69a44' : '#ef535044' })));
@@ -718,6 +975,7 @@ async function loadAndAnalyze() {
     const report = buildMTFReport(d1, h4, h1);
 
     const chartAnalysis = analyzeSMC(chartBars, 3);
+    window._lastChartAnalysis = chartAnalysis;
     renderChartOverlays(chartAnalysis, report.setup);
     renderMTFPanel(report);
 
@@ -775,10 +1033,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateSheetsStatus('none');
   });
 
-  // ── 初始化快取（從 Sheets 或 localStorage）──
-  updateSheetsStatus(getSheetsUrl() ? 'connecting' : 'none');
+  // ── JSONBin 輸入框 ──
+  const jbKeyInput = document.getElementById('jsonbin-key-input');
+  const jbIdInput  = document.getElementById('jsonbin-id-input');
+  const jb = getJsonbinConfig();
+  if (jbKeyInput) jbKeyInput.value = jb.key;
+  if (jbIdInput)  jbIdInput.value  = jb.id;
+  document.getElementById('jsonbin-connect-btn')?.addEventListener('click', () => {
+    setJsonbinConfig(jbKeyInput?.value || '', jbIdInput?.value || '');
+  });
+  document.getElementById('jsonbin-clear-btn')?.addEventListener('click', () => {
+    if (jbKeyInput) jbKeyInput.value = '';
+    if (jbIdInput)  jbIdInput.value  = '';
+    setJsonbinConfig('', '');
+    updateJsonbinStatus('none');
+  });
+
+  // ── 初始化快取（JSONBin → Sheets → localStorage）──
+  const jbCfg = getJsonbinConfig();
+  if (jbCfg.key && jbCfg.id) {
+    updateJsonbinStatus('connecting');
+  } else {
+    updateSheetsStatus(getSheetsUrl() ? 'connecting' : 'none');
+  }
   await initTradesCache();
-  updateSheetsStatus(getSheetsUrl() ? 'ok' : 'none');
+  if (!jbCfg.key || !jbCfg.id) {
+    updateSheetsStatus(getSheetsUrl() ? 'ok' : 'none');
+  }
   renderTradeLog();
 
   const symbolInput = document.getElementById('symbol-input');
